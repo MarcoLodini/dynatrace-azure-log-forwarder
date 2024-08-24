@@ -13,6 +13,7 @@ param targetPaasToken string = ''
 param targetAPIToken string
 
 @description('Event hub connection string')
+@secure()
 param eventHubConnectionString string = ''
 
 @description('Event hub name')
