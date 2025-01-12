@@ -45,6 +45,9 @@ param eventhubConnectionCredentials string = ''
 @description('Eventhub\'s host name')
 param eventhubConnectionFullyQualifiedNamespace string = ''
 
+@description('Custom Consumer group name')
+param customConsumerGroup string = ''
+
 var dtHost = replace(targetUrl, 'https://', '')
 var registryUser = (contains(dtHost, '/e/') ? last(split(dtHost, '/e/')) : first(split(dtHost, '.')))
 var image = '${dtHost}/linux/activegate:latest'
@@ -291,6 +294,7 @@ resource functionName_appSettings 'Microsoft.Web/sites/config@2023-12-01' = {
     EVENTHUB_CONNECTION_STRING__clientId: eventhubConnectionClientId
     EVENTHUB_CONNECTION_STRING__credential: eventhubConnectionCredentials
     EVENTHUB_CONNECTION_STRING__fullyQualifiedNamespace: eventhubConnectionFullyQualifiedNamespace
+    CONSUMER_GROUP: customConsumerGroup
   }
 }
 
