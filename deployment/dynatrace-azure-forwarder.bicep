@@ -1,6 +1,9 @@
 @description('Dynatrace logs forwarder name')
 param forwarderName string = 'dyntracelogs'
 
+@description('App Service Plan resource id. If provided, a new app service plan will not be created')
+param appServicePlanId string = ''
+
 @description('Dynatrace destination (ActiveGate) URL')
 param targetUrl string
 
@@ -11,13 +14,6 @@ param targetPaasToken string = ''
 @description('Dynatrace API Token')
 @secure()
 param targetAPIToken string
-
-@description('Event hub connection string')
-@secure()
-param eventHubConnectionString string = ''
-
-@description('Event hub name')
-param eventHubName string
 
 @description('Deploy Active Gate')
 param deployActiveGateContainer bool = false
@@ -35,6 +31,12 @@ param resourceTags object = {
 
 @description('Filter config')
 param filterConfig string
+
+@description('Event connection string. If provided, a new eventhub will not be created')
+param eventHubConnectionString string = ''
+
+@description('Event hub name')
+param eventHubName string = ''
 
 @description('MI user id')
 param eventhubConnectionClientId string = ''
@@ -56,6 +58,7 @@ var functionSubnetName = 'functionapp'
 var containerSubnetName = 'aci'
 var appServicePlanName = '${forwarderName}-plan'
 var functionName = '${forwarderName}-function'
+var eventhubNamespaceName = '${forwarderName}-eventhub'
 var forwarderNameShort = take(forwarderName, 18)
 var randomIdToMakeStorageAccountGloballyUnique = substring(uniqueString(forwarderName, resourceGroup().id), 0, 4)
 var storageAccountName = '${forwarderNameShort}sa${randomIdToMakeStorageAccountGloballyUnique}'
@@ -227,7 +230,7 @@ resource storageAccountName_default 'Microsoft.Storage/storageAccounts/blobServi
   }
 }
 
-resource appServicePlan 'Microsoft.Web/serverfarms@2023-12-01' = { //TODO: Since serverFarms cost, how about allowing users to choose the eventual serverFarm?
+resource appServicePlan 'Microsoft.Web/serverfarms@2023-12-01' = if (appServicePlanId == '') {
   name: appServicePlanName
   location: resourceGroup().location
   tags: resourceTags
@@ -258,7 +261,7 @@ resource function 'Microsoft.Web/sites@2023-12-01' = {
   kind: 'functionapp,linux'
   properties: {
     enabled: true
-    serverFarmId: appServicePlan.id
+    serverFarmId: appServicePlanId == '' ? appServicePlan.id : appServicePlanId
     reserved: false
     isXenon: false
     hyperV: false
@@ -282,8 +285,8 @@ resource functionName_appSettings 'Microsoft.Web/sites/config@2023-12-01' = {
     FUNCTIONS_EXTENSION_VERSION: '~4'
     DYNATRACE_URL: deployActiveGateContainer ? 'https://172.0.0.4:9999/e/${registryUser}' : targetUrl
     DYNATRACE_ACCESS_KEY: targetAPIToken
-    EVENTHUB_CONNECTION_STRING: eventHubConnectionString
-    EVENTHUB_NAME: eventHubName
+    EVENTHUB_CONNECTION_STRING: eventHubConnectionString == '' ? eventHubAuthorization.listKeys().primaryConnectionString : eventHubConnectionString
+    EVENTHUB_NAME: eventHubName == '' ? eventHub.name : eventHubName
     AzureWebJobsStorage: 'DefaultEndpointsProtocol=https;AccountName=${storageAccount.name};EndpointSuffix=${environment().suffixes.storage};AccountKey=${storageAccount.listKeys().keys[0].value}'
     REQUIRE_VALID_CERTIFICATE: '${requireValidCertificate}'
     SELF_MONITORING_ENABLED: '${selfMonitoringEnabled}'
@@ -346,5 +349,40 @@ resource functionName_storageAccountName_default_azure_webjobs_secrets 'Microsof
     defaultEncryptionScope: '$account-encryption-key'
     denyEncryptionScopeOverride: false
     publicAccess: 'None'
+  }
+}
+
+//TODO: Correctly handle Managed Identity case
+/******************************************************************************
+ * Event Hub
+ *****************************************************************************/
+
+resource eventHubNamespace 'Microsoft.EventHub/namespaces@2024-01-01' = if (eventHubConnectionString == '' ) {
+  name: eventhubNamespaceName
+  location: resourceGroup().location
+  tags: resourceTags
+  properties: {
+    minimumTlsVersion: '1.2'
+    isAutoInflateEnabled: false
+    maximumThroughputUnits: 1
+  }
+}
+
+resource eventHub 'Microsoft.EventHub/namespaces/eventhubs@2024-01-01' = if (eventHubConnectionString == '') {
+  parent: eventHubNamespace
+  name: 'dynatrace'
+  properties: {
+    messageRetentionInDays: 1
+    partitionCount: 1
+  }
+}
+
+resource eventHubAuthorization 'Microsoft.EventHub/namespaces/eventhubs/authorizationRules@2024-01-01' = if (eventHubConnectionString == '') {
+  parent: eventHub
+  name: 'ReadSharedAccessKey'
+  properties: {
+    rights: [
+      'Listen'
+    ]
   }
 }
