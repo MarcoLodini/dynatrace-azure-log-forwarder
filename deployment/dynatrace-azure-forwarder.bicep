@@ -386,3 +386,30 @@ resource eventHubAuthorization 'Microsoft.EventHub/namespaces/eventhubs/authoriz
     ]
   }
 }
+
+/******************************************************************************
+ * Supporting scripts
+ *****************************************************************************/
+//TODO: Complete support
+resource scriptParamVerifier 'Microsoft.Resources/deploymentScripts@2023-08-01' = {
+  name: 'param-verifier'
+  location: resourceGroup().location
+  kind: 'AzureCLI'
+  properties: {
+    azCliVersion: '2.42.0'
+    scriptContent: loadTextContent('./dynatrace-azure-param-verifier.sh')
+    retentionInterval: 'P1D'
+    arguments: ''
+    timeout: 'PT30M'
+    environmentVariables: [
+      {
+        name: 'EVENT_HUB_CONNECTION_STRING'
+        secureValue: eventHubConnectionString == '' ? eventHubAuthorization.listKeys().primaryConnectionString : eventHubConnectionString
+      }
+      {
+        name: 'FILTER_CONFIG'
+        value: filterConfig
+      }
+    ]
+  }
+}
