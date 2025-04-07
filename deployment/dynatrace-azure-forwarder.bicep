@@ -1,5 +1,5 @@
 @description('Dynatrace logs forwarder name')
-param forwarderName string = 'dyntracelogs'
+param forwarderName string = 'dynatracelogs'
 
 @description('App Service Plan resource id. If provided, a new app service plan will not be created')
 param appServicePlanId string = ''
@@ -50,20 +50,31 @@ param eventhubConnectionFullyQualifiedNamespace string = ''
 @description('Custom Consumer group name')
 param customConsumerGroup string = ''
 
+// Param names
+@description('If deploying ActivateGate, the name of the virtual network.')
+param virtualNetworkName string = '${forwarderName}-vnet'
+@description('If deploying ActivateGate, the name of the subnet to create.')
+param functionSubnetName string = 'functionapp'
+@description('If deploying ActivateGate, the name of the subnet to create.')
+param containerSubnetName string = 'aci'
+
+@description('If appServicePlanId is not provided, the name of the app service plan to create.')
+param appServicePlanName string = '${forwarderName}-plan'
+
+@description('Name of function app to deploy.')
+var functionName = '${forwarderName}-function'
+@description('Name of the EventHubNamespace to deploy')
+var eventhubNamespaceName = '${forwarderName}-eventhub'
+@description('Name of the supporting storage account to create.')
+var storageAccountName = '${forwarderNameShort}sa${randomIdToMakeStorageAccountGloballyUnique}'
+var randomIdToMakeStorageAccountGloballyUnique = substring(uniqueString(forwarderName, resourceGroup().id), 0, 4) //We are keeping this in case someone doesn't provide the name.
+
 var dtHost = replace(targetUrl, 'https://', '')
 var registryUser = (contains(dtHost, '/e/') ? last(split(dtHost, '/e/')) : first(split(dtHost, '.')))
 var image = '${dtHost}/linux/activegate:latest'
-var virtualNetworkName = '${forwarderName}-vnet'
-var functionSubnetName = 'functionapp'
-var containerSubnetName = 'aci'
-var appServicePlanName = '${forwarderName}-plan'
-var functionName = '${forwarderName}-function'
-var eventhubNamespaceName = '${forwarderName}-eventhub'
 var forwarderNameShort = take(forwarderName, 18)
-var randomIdToMakeStorageAccountGloballyUnique = substring(uniqueString(forwarderName, resourceGroup().id), 0, 4)
-var storageAccountName = '${forwarderNameShort}sa${randomIdToMakeStorageAccountGloballyUnique}'
 
-resource virtualNetwork 'Microsoft.Network/virtualNetworks@2024-01-01' = if (deployActiveGateContainer) {
+resource virtualNetwork 'Microsoft.Network/virtualNetworks@2024-01-01' = if (deployActiveGateContainer) { //TODO: Check if user provided a virtual network, otherwise deploy
   name: virtualNetworkName
   location: resourceGroup().location
   tags: resourceTags
